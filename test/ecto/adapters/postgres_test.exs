@@ -821,6 +821,29 @@ defmodule Ecto.Adapters.PostgresTest do
            "SELECT s0.\"id\", s2.\"id\" FROM \"schema\" AS s0 INNER JOIN \"schema2\" AS s1 ON TRUE INNER JOIN \"schema2\" AS s2 ON TRUE"
   end
 
+  test "literals in select in subquery" do
+    subquery = select(Schema, [r], %{x: r.x, y: "literal"})
+    query = from(s in subquery(subquery), select: %{a: s.x, b: s.y, c: "otherliteral"}) |> plan()
+
+    assert all(query) ==
+      ~s{SELECT s0."x", s0."y" FROM (SELECT s0."x" AS "x", 'literal' AS "y" FROM "schema" AS s0) AS s0}
+  end
+
+  test "literals in unions" do
+    query_1 = select(Schema, [r], %{x: r.x})
+    query_2 = select(Schema, [r], %{x: r.x})
+
+    query =
+      union(query_1, ^query_2)
+      |> subquery
+      |> select([r], r.x)
+      |> order_by(:x)
+      |> plan()
+
+    assert all(query) ==
+      ~s{SELECT s0."x" FROM (SELECT s0."x" AS "x" FROM "schema" AS s0 UNION (SELECT s0."x" FROM "schema" AS s0)) AS s0 ORDER BY s0."x"}
+  end
+
   describe "query interpolation parameters" do
     test "self join on subquery" do
       subquery = select(Schema, [r], %{x: r.x, y: r.y})
